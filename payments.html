@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Management - My Diwali Crackers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; }
+        .tab-inactive { color: #9ca3af; }
+        .badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500; }
+        .badge-paid { background: #dcfce7; color: #166534; }
+        .badge-partial { background: #fed7aa; color: #92400e; }
+        .badge-unpaid { background: #fee2e2; color: #991b1b; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="app">
+        <!-- Header -->
+        <div class="bg-white border-b">
+            <div class="max-w-7xl mx-auto px-4 py-4">
+                <h1 class="text-2xl font-bold text-gray-900">Payment Management</h1>
+                <p class="text-gray-600 text-sm mt-1">Manage order payments and track payment status</p>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="max-w-7xl mx-auto px-4 py-8">
+            
+            <!-- Tab Navigation -->
+            <div class="flex gap-6 border-b mb-6">
+                <button @click="currentTab = 'orders'" :class="['pb-3 font-medium', currentTab === 'orders' ? 'tab-active' : 'tab-inactive']">
+                    Orders & Payments
+                </button>
+                <button @click="currentTab = 'record'" :class="['pb-3 font-medium', currentTab === 'record' ? 'tab-active' : 'tab-inactive']">
+                    Record Payment
+                </button>
+            </div>
+
+            <!-- Orders Tab -->
+            <div v-if="currentTab === 'orders'">
+                <!-- Filters -->
+                <div class="bg-white p-4 rounded-lg mb-6 flex gap-4 items-center">
+                    <input v-model="searchOrder" type="text" placeholder="Search order number or customer..." class="flex-1 px-3 py-2 border rounded">
+                    <select v-model="filterPaymentStatus" class="px-3 py-2 border rounded">
+                        <option value="">All Payment Status</option>
+                        <option value="paid">Paid</option>
+                        <option value="partial payment">Partial Payment</option>
+                        <option value="unpaid">Unpaid</option>
+                    </select>
+                    <button @click="fetchOrders" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Search</button>
+                </div>
+
+                <!-- Orders Table -->
+                <div v-if="!loading" class="bg-white rounded-lg overflow-hidden shadow">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 border-b">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">Order</th>
+                                <th class="px-6 py-3 text-left text-sm font-semibold text-gray-900">Customer</th>
+                                <th class="px-6 py-3 text-right text-sm font-semibold text-gray-900">Total</th>
+                                <th class="px-6 py-3 text-right text-sm font-semibold text-gray-900">Collected</th>
+                                <th class="px-6 py-3 text-right text-sm font-semibold text-gray-900">Balance</th>
+                                <th class="px-6 py-3 text-center text-sm font-semibold text-gray-900">Status</th>
+                                <th class="px-6 py-3 text-center text-sm font-semibold text-gray-900">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="order in filteredOrders" :key="order.id" class="border-b hover:bg-gray-50">
+                                <td class="px-6 py-4 text-sm font-medium text-blue-600">{{ order.orderNumber }}</td>
+                                <td class="px-6 py-4 text-sm text-gray-600">{{ order.guestName || order.email }}</td>
+                                <td class="px-6 py-4 text-sm text-right">₹{{ order.total.toFixed(2) }}</td>
+                                <td class="px-6 py-4 text-sm text-right text-green-600">₹{{ order.amountCollected.toFixed(2) }}</td>
+                                <td class="px-6 py-4 text-sm text-right text-red-600">₹{{ order.balanceDue.toFixed(2) }}</td>
+                                <td class="px-6 py-4 text-center">
+                                    <span :class="['badge', getPaymentBadgeClass(order.paymentStatus)]">
+                                        {{ order.paymentStatus }}
+                                    </span>
+                                </td>
+                                <td class="px-6 py-4 text-center">
+                                    <button @click="selectOrderForPayment(order)" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                                        View
+                                    </button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div v-else class="bg-white p-8 rounded-lg text-center">
+                    <p class="text-gray-600">Loading orders...</p>
+                </div>
+            </div>
+
+            <!-- Record Payment Tab -->
+            <div v-if="currentTab === 'record'" class="grid grid-cols-2 gap-6">
+                <!-- Left: Order Details -->
+                <div>
+                    <div class="bg-white p-6 rounded-lg mb-6">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Search Order</label>
+                        <input v-model="selectedOrderId" type="text" placeholder="Enter order ID or order number" class="w-full px-3 py-2 border rounded mb-3">
+                        <button @click="loadOrderDetails" class="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Load Order</button>
+                    </div>
+
+                    <div v-if="selectedOrder" class="bg-white p-6 rounded-lg">
+                        <h3 class="font-semibold text-lg mb-4">Order Details</h3>
+                        <div class="space-y-3 text-sm">
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Order Number:</span>
+                                <span class="font-medium">{{ selectedOrder.orderNumber }}</span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="text-gray-600">Customer:</span>
+                                <span class="font-medium">{{ selectedOrder.guestName || selectedOrder.email }}</span>
+                            </div>
+                            <div class="border-t pt-3 mt-3">
+                                <div class="flex justify-between mb-2">
+                                    <span class="text-gray-600">Order Total:</span>
+                                    <span class="font-medium">₹{{ selectedOrder.total.toFixed(2) }}</span>
+                                </div>
+                                <div class="flex justify-between mb-2 text-green-600">
+                                    <span>Amount Collected:</span>
+                                    <span class="font-medium">₹{{ selectedOrder.amountCollected.toFixed(2) }}</span>
+                                </div>
+                                <div class="flex justify-between text-red-600 font-semibold bg-red-50 p-2 rounded">
+                                    <span>Balance Due:</span>
+                                    <span>₹{{ selectedOrder.balanceDue.toFixed(2) }}</span>
+                                </div>
+                            </div>
+                            <div class="border-t pt-3 mt-3">
+                                <div class="text-center">
+                                    <span :class="['badge text-base px-4 py-2', getPaymentBadgeClass(selectedOrder.paymentStatus)]">
+                                        {{ selectedOrder.paymentStatus }}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Payment Form -->
+                <div>
+                    <div v-if="selectedOrder" class="bg-white p-6 rounded-lg">
+                        <h3 class="font-semibold text-lg mb-4">Record Payment</h3>
+                        <form @submit.prevent="recordPayment" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                                <input v-model.number="paymentForm.amount" type="number" step="0.01" placeholder="0.00" class="w-full px-3 py-2 border rounded" required>
+                                <small class="text-gray-500">Max: ₹{{ selectedOrder.balanceDue.toFixed(2) }}</small>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
+                                <select v-model="paymentForm.paymentMethod" class="w-full px-3 py-2 border rounded" required>
+                                    <option value="">Select method</option>
+                                    <option value="Cash">Cash</option>
+                                    <option value="Bank Transfer">Bank Transfer</option>
+                                    <option value="Check">Check</option>
+                                    <option value="Online">Online</option>
+                                    <option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Reference Number (Optional)</label>
+                                <input v-model="paymentForm.referenceNumber" type="text" placeholder="e.g., Check #, Txn ID" class="w-full px-3 py-2 border rounded">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Notes (Optional)</label>
+                                <textarea v-model="paymentForm.notes" placeholder="Add any notes..." class="w-full px-3 py-2 border rounded" rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-medium">
+                                Record Payment
+                            </button>
+                        </form>
+
+                        <!-- Payment History -->
+                        <div v-if="selectedOrder.payments && selectedOrder.payments.length > 0" class="mt-8 pt-8 border-t">
+                            <h4 class="font-semibold mb-4">Payment History</h4>
+                            <div class="space-y-3">
+                                <div v-for="payment in selectedOrder.payments" :key="payment.id" class="bg-gray-50 p-3 rounded flex justify-between items-center">
+                                    <div class="flex-1">
+                                        <div class="font-medium">₹{{ payment.amount.toFixed(2) }}</div>
+                                        <small class="text-gray-600">{{ payment.paymentMethod }} • {{ formatDate(payment.createdAt) }}</small>
+                                        <small v-if="payment.referenceNumber" class="block text-gray-500">Ref: {{ payment.referenceNumber }}</small>
+                                    </div>
+                                    <button @click="deletePayment(payment.id)" class="text-red-600 hover:text-red-800 text-sm">Delete</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div v-else class="bg-white p-8 rounded-lg text-center text-gray-500">
+                        <p>Select an order to record payment</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/vue@3/dist/vue.global.js"></script>
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    currentTab: 'orders',
+                    orders: [],
+                    loading: false,
+                    searchOrder: '',
+                    filterPaymentStatus: '',
+                    selectedOrder: null,
+                    selectedOrderId: '',
+                    paymentForm: {
+                        amount: '',
+                        paymentMethod: '',
+                        referenceNumber: '',
+                        notes: ''
+                    },
+                    api: axios.create({
+                        baseURL: 'https://mydiwalicrackers.com/api'
+                    })
+                };
+            },
+            computed: {
+                filteredOrders() {
+                    let filtered = this.orders;
+                    
+                    if (this.searchOrder) {
+                        const search = this.searchOrder.toLowerCase();
+                        filtered = filtered.filter(o => 
+                            o.orderNumber.toLowerCase().includes(search) ||
+                            (o.guestName && o.guestName.toLowerCase().includes(search)) ||
+                            (o.email && o.email.toLowerCase().includes(search))
+                        );
+                    }
+                    
+                    if (this.filterPaymentStatus) {
+                        filtered = filtered.filter(o => 
+                            o.paymentStatus.toLowerCase() === this.filterPaymentStatus.toLowerCase()
+                        );
+                    }
+                    
+                    return filtered;
+                }
+            },
+            methods: {
+                async fetchOrders() {
+                    this.loading = true;
+                    try {
+                        const response = await this.api.get('/admin/orders', {
+                            params: { 
+                                size: 100,
+                                paymentStatus: this.filterPaymentStatus ? this.filterPaymentStatus.toLowerCase() : undefined
+                            }
+                        });
+                        this.orders = response.data.data.content || [];
+                    } catch (error) {
+                        alert('Error loading orders: ' + error.message);
+                    } finally {
+                        this.loading = false;
+                    }
+                },
+                async loadOrderDetails() {
+                    if (!this.selectedOrderId) {
+                        alert('Please enter an order ID or order number');
+                        return;
+                    }
+                    
+                    try {
+                        const response = await this.api.get(`/admin/orders/${this.selectedOrderId}`);
+                        this.selectedOrder = response.data.data;
+                        
+                        // Load payment details
+                        const paymentResponse = await this.api.get(`/payments/${this.selectedOrderId}`);
+                        this.selectedOrder.payments = paymentResponse.data.data.payments;
+                        this.selectedOrder.amountCollected = paymentResponse.data.data.amountCollected;
+                        this.selectedOrder.balanceDue = paymentResponse.data.data.balanceDue;
+                        this.selectedOrder.paymentStatus = paymentResponse.data.data.paymentStatus;
+                        
+                        // Clear form
+                        this.paymentForm = {
+                            amount: '',
+                            paymentMethod: '',
+                            referenceNumber: '',
+                            notes: ''
+                        };
+                    } catch (error) {
+                        alert('Order not found: ' + (error.response?.data?.error || error.message));
+                    }
+                },
+                selectOrderForPayment(order) {
+                    this.selectedOrderId = order.id;
+                    this.currentTab = 'record';
+                    this.loadOrderDetails();
+                },
+                async recordPayment() {
+                    if (!this.paymentForm.amount || !this.paymentForm.paymentMethod) {
+                        alert('Please fill in amount and payment method');
+                        return;
+                    }
+                    
+                    try {
+                        await this.api.post(`/payments/${this.selectedOrder.id}`, this.paymentForm);
+                        alert('Payment recorded successfully!');
+                        await this.loadOrderDetails();
+                        await this.fetchOrders();
+                    } catch (error) {
+                        alert('Error recording payment: ' + (error.response?.data?.error || error.message));
+                    }
+                },
+                async deletePayment(paymentId) {
+                    if (!confirm('Are you sure you want to delete this payment?')) return;
+                    
+                    try {
+                        await this.api.delete(`/payments/${paymentId}`);
+                        alert('Payment deleted successfully!');
+                        await this.loadOrderDetails();
+                        await this.fetchOrders();
+                    } catch (error) {
+                        alert('Error deleting payment: ' + (error.response?.data?.error || error.message));
+                    }
+                },
+                getPaymentBadgeClass(status) {
+                    if (status === 'Paid') return 'badge-paid';
+                    if (status === 'Partial Payment') return 'badge-partial';
+                    return 'badge-unpaid';
+                },
+                formatDate(dateObj) {
+                    if (!dateObj) return '';
+                    const timestamp = dateObj.seconds * 1000;
+                    return new Date(timestamp).toLocaleDateString();
+                }
+            },
+            mounted() {
+                this.fetchOrders();
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
