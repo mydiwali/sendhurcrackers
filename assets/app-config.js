@@ -4,8 +4,8 @@
 (function (global) {
   'use strict';
 
-  var PROD_ORIGIN = 'https://mydiwalicrackers.com';
-  var PROD_API_RE = /^https?:\/\/(www\.)?mydiwalicrackers\.com\/api/i;
+  var PROD_ORIGIN = 'https://red-mantis-210719.hostingersite.com/';
+  var PROD_API_RE = /^https?:\/\/(www\.)?red-mantis-210719.hostingersite\.com\/api/i;
   var isLocal = /^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(location.hostname);
   var apiOrigin = isLocal ? location.origin : PROD_ORIGIN;
 
