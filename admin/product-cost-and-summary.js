@@ -123,17 +123,13 @@
     }
   }
 
-  // The compiled admin bundle's own axios instance has the production API
-  // origin hardcoded (https://mydiwalicrackers.com/api), so when this app is
-  // run locally (e.g. `php -S localhost:8000`) every built-in page (orders
-  // list, order detail, products list, etc.) still fetches its data from
-  // production while this local DB is empty/different — causing "Order not
-  // found" and similar errors purely as a local-testing artifact. When we
-  // detect we're running on a local dev host, rewrite those requests to the
-  // current origin instead. This never runs in production (hostname check),
-  // so it changes no existing behavior there.
-  const IS_LOCAL_DEV = /^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(location.hostname);
-  const PROD_API_RE = /^https?:\/\/(www\.)?mydiwalicrackers\.com\/api/i;
+  // The compiled admin bundle's axios instance reads its API origin from
+  // window.APP_CONFIG (assets/app-config.js) at load time, so it already
+  // targets the right backend. This is a defense-in-depth net that rewrites
+  // any request that still slips through with the production origin baked
+  // in (e.g. a stale cached bundle) to the current origin during local dev.
+  const IS_LOCAL_DEV = !!(window.APP_CONFIG && window.APP_CONFIG.isLocal);
+  const PROD_API_RE = window.APP_CONFIG && window.APP_CONFIG.prodApiRegex;
 
   // Admin product save requests go through axios (XHR transport), so we splice
   // purchasedPrice into the outgoing JSON body right before it is sent.
@@ -142,7 +138,7 @@
   XMLHttpRequest.prototype.open = function (method, url) {
     let finalUrl = url;
     try {
-      if (IS_LOCAL_DEV && typeof url === 'string' && PROD_API_RE.test(url)) {
+      if (IS_LOCAL_DEV && PROD_API_RE && typeof url === 'string' && PROD_API_RE.test(url)) {
         finalUrl = url.replace(PROD_API_RE, location.origin + '/api');
       }
     } catch (_) { /* if rewrite fails, fall back to original url */ }
