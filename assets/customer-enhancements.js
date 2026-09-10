@@ -112,6 +112,89 @@
     container.style.margin = '0';
   }
 
+  // ─────── Replace the old single contact number everywhere with the two
+  // new contacts (each number works for both calls and WhatsApp) ───────
+  var CONTACTS = [
+    { name: 'Prabhakaran', phone: '+919047498265', display: '+91 90474 98265' },
+    { name: 'Kalirajan', phone: '+919500479848', display: '+91 95004 79848' },
+  ];
+  var OLD_PHONE_RE = /^(tel:)?\+?9?19?361947402$/;
+
+  function isOldPhoneHref(href, prefix) {
+    if (!href) return false;
+    var digits = href.replace(prefix, '').replace(/[^0-9]/g, '');
+    return digits.indexOf('9361947402') !== -1 || digits.indexOf('9161947402') !== -1;
+  }
+
+  // Footer "Contact Us" list — swap the single phone <li> for one <li> per contact.
+  function patchFooterContacts() {
+    var oldLi = null;
+    Array.from(document.querySelectorAll('ul.space-y-3 > li a[href^="tel:"]')).forEach(function (a) {
+      if (isOldPhoneHref(a.getAttribute('href'), 'tel:')) oldLi = a.closest('li');
+    });
+    if (!oldLi) return;
+    var list = oldLi.parentElement;
+    if (!list || list.dataset.ceContactsPatched === '1') return;
+    list.dataset.ceContactsPatched = '1';
+
+    CONTACTS.forEach(function (contact) {
+      var li = oldLi.cloneNode(true);
+      var a = li.querySelector('a[href^="tel:"]');
+      a.setAttribute('href', 'tel:' + contact.phone);
+      a.textContent = contact.name + ': ' + contact.display;
+      oldLi.insertAdjacentElement('beforebegin', li);
+    });
+    oldLi.remove();
+  }
+
+  // Floating "Call Us" / "Chat on WhatsApp" corner buttons — point at the
+  // first contact since only one number can be linked from a single icon.
+  function patchFloatingButtons() {
+    var callBtn = Array.from(document.querySelectorAll('a')).find(function (a) { return a.title === 'Call Us'; });
+    var waBtn = Array.from(document.querySelectorAll('a')).find(function (a) { return a.title === 'Chat on WhatsApp'; });
+    var primary = CONTACTS[0];
+    if (callBtn && isOldPhoneHref(callBtn.getAttribute('href'), 'tel:')) {
+      callBtn.setAttribute('href', 'tel:' + primary.phone);
+    }
+    if (waBtn && /9361947402|9161947402/.test(waBtn.getAttribute('href') || '')) {
+      waBtn.setAttribute('href', waBtn.getAttribute('href').replace(/91\d{10}/, primary.phone.replace('+', '')));
+    }
+  }
+
+  // Contact page — replace the single Phone/WhatsApp cards with one card per contact.
+  function patchContactPage() {
+    var h1 = Array.from(document.querySelectorAll('h1')).find(function (h) { return txt(h) === 'Contact Us'; });
+    if (!h1) return;
+    var phoneCard = Array.from(document.querySelectorAll('a[href^="tel:"]')).find(function (a) { return isOldPhoneHref(a.getAttribute('href'), 'tel:'); });
+    if (!phoneCard) return;
+    var grid = phoneCard.parentElement;
+    if (!grid || grid.dataset.ceContactsPatched === '1') return;
+    var waCard = Array.from(grid.querySelectorAll('a[href*="wa.me"]'))[0];
+    grid.dataset.ceContactsPatched = '1';
+
+    CONTACTS.forEach(function (contact) {
+      var card = document.createElement('div');
+      card.className = phoneCard.className;
+      var phoneIcon = phoneCard.querySelector('svg');
+      card.innerHTML =
+        (phoneIcon ? phoneIcon.outerHTML : '') +
+        '<h3 class="font-bold text-surface-900 dark:text-white mb-1">' + contact.name + '</h3>' +
+        '<p class="text-primary-600 dark:text-primary-400 font-semibold text-lg">' + contact.display + '</p>' +
+        '<div class="flex gap-3 mt-2">' +
+          '<a href="tel:' + contact.phone + '" class="text-sm font-medium text-primary-600 hover:text-primary-700">Call</a>' +
+          '<a href="https://wa.me/' + contact.phone.replace('+', '') + '" target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-green-600 hover:text-green-700">WhatsApp</a>' +
+        '</div>';
+      phoneCard.insertAdjacentElement('beforebegin', card);
+    });
+    phoneCard.remove();
+    if (waCard) waCard.remove();
+
+    var orderBtn = Array.from(document.querySelectorAll('a[href*="wa.me"]')).find(function (a) { return /place%20an%20order|place an order/i.test(a.getAttribute('href') || ''); });
+    if (orderBtn) {
+      orderBtn.setAttribute('href', 'https://wa.me/' + CONTACTS[0].phone.replace('+', '') + '?text=Hi%2C%20I%20would%20like%20to%20place%20an%20order');
+    }
+  }
+
   function findPlaceEnquiryButton() {
     var allButtons = Array.from(document.querySelectorAll('button'));
     for (var i = 0; i < allButtons.length; i++) {
@@ -372,6 +455,9 @@
   function loop() {
     try {
       patchHeroBanner();
+      patchFooterContacts();
+      patchFloatingButtons();
+      patchContactPage();
       renderCouponBox();
       renderGstNote();
       hideDownloadInvoiceButton();
