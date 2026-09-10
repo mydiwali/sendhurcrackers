@@ -4,14 +4,18 @@
 (function (global) {
   'use strict';
 
-  var PROD_ORIGIN = 'https://red-mantis-210719.hostingersite.com/';
-  var PROD_API_RE = /^https?:\/\/(www\.)?red-mantis-210719.hostingersite\.com\/api/i;
   var isLocal = /^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(location.hostname);
-  var apiOrigin = isLocal ? location.origin : PROD_ORIGIN;
+  // API is always same-origin as whatever domain is currently serving the
+  // frontend — never a fixed production domain, so this works on any domain
+  // the site is deployed to without code changes.
+  var apiOrigin = location.origin;
+  // Matches an absolute "<any-domain>/api" URL so local dev can rewrite stale
+  // hardcoded references (e.g. from browser/CDN cache of an old bundle) back
+  // to localhost, regardless of which production domain they point to.
+  var PROD_API_RE = isLocal ? /^https?:\/\/(?!localhost|127\.0\.0\.1|\[?::1\]?)[^\/]+\/api/i : null;
 
   global.APP_CONFIG = {
     isLocal: isLocal,
-    prodOrigin: PROD_ORIGIN,
     prodApiRegex: PROD_API_RE,
     apiOrigin: apiOrigin,
     apiBaseUrl: apiOrigin + '/api'

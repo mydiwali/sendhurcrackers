@@ -465,6 +465,59 @@ function routeAdmin(string $method, string $r1, string $r2, string $r3, string $
             $b=jsonBody(); execute('UPDATE orders SET status=?,updated_at=NOW() WHERE id=?','ss',[strtolower($b['status']??'pending'),$r2]);
             jsonOut(['data'=>['id'=>$r2,'status'=>$b['status']]]);
         }
+        // PUT /admin/orders/:id/items — edit line items (add/remove products) and/or coupon
+        if ($method === 'PUT' && $r2 && $r3 === 'items') {
+            if (!queryOne('SELECT id FROM orders WHERE id = ? LIMIT 1', 's', [$r2])) {
+                jsonOut(['error' => 'Order not found'], 404);
+            }
+            $b = jsonBody();
+            $items = $b['items'] ?? null;
+            if (!is_array($items)) jsonOut(['error' => 'items must be an array'], 400);
+
+            // Rebuild each line from live product data — never trust client-sent price/name.
+            $normItems = [];
+            foreach ($items as $it) {
+                $qty = max(1, (int)($it['quantity'] ?? 1));
+                $productId = $it['productId'] ?? null;
+                if ($productId) {
+                    $p = queryOne('SELECT id, name, price, primary_image_url FROM products WHERE id = ? LIMIT 1', 's', [$productId]);
+                    if (!$p) continue; // product deleted since — drop the line
+                    $normItems[] = ['productId' => $p['id'], 'name' => $p['name'], 'price' => (float)$p['price'], 'quantity' => $qty, 'image' => $p['primary_image_url'] ?? null];
+                }
+            }
+
+            $subtotal = array_sum(array_map(fn($i) => $i['price'] * $i['quantity'], $normItems));
+
+            // Re-validate coupon server-side (never trust client-computed discount).
+            $couponCode = null;
+            $discountAmount = 0;
+            if (!empty($b['couponCode'])) {
+                $code = strtoupper(trim($b['couponCode']));
+                $c = queryOne('SELECT code, type, value, max_discount_amount, min_order_value, is_active FROM coupons WHERE code = ? AND is_active = 1 LIMIT 1', 's', [$code]);
+                if (!$c) jsonOut(['error' => 'Invalid or inactive coupon code'], 400);
+                $minOrderValue = $c['min_order_value'] !== null ? (float)$c['min_order_value'] : 0;
+                if ($minOrderValue > 0 && $subtotal < $minOrderValue) {
+                    jsonOut(['error' => "Order subtotal must be at least ₹$minOrderValue to use this coupon"], 400);
+                }
+                if (strtoupper((string)$c['type']) === 'PERCENTAGE') {
+                    $discountAmount = ($subtotal * (float)$c['value']) / 100;
+                    if ($c['max_discount_amount'] !== null) $discountAmount = min($discountAmount, (float)$c['max_discount_amount']);
+                } else {
+                    $discountAmount = (float)$c['value'];
+                }
+                $discountAmount = max(0, min($discountAmount, $subtotal));
+                $couponCode = $c['code'];
+            }
+
+            $total = $subtotal - $discountAmount;
+            execute(
+                'UPDATE orders SET items=?, coupon_code=?, discount_amount=?, subtotal_amount=?, total=?, total_amount=?, updated_at=NOW() WHERE id=?',
+                'ssdddds',
+                [json_encode($normItems), $couponCode, $discountAmount, $subtotal, $total, $total, $r2]
+            );
+            $o = queryOne('SELECT * FROM orders WHERE id = ? LIMIT 1', 's', [$r2]);
+            jsonOut(['data' => adminNormalizeOrder($o, true)]);
+        }
         // POST /admin/orders/:id/tracking
         if ($method === 'POST' && $r2 && $r3 === 'tracking') {
             $b=jsonBody(); $id=uuid();

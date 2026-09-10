@@ -77,6 +77,41 @@
     return '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  // ─────── Replace the animated fireworks hero with a static banner image ───────
+  // herobanner.png already has the "Sendhur Crackers / Celebrate Diwali" artwork
+  // baked in, so we hide the title/subtitle/decorations and keep only the button.
+  function patchHeroBanner() {
+    var h1 = Array.from(document.querySelectorAll('h1')).find(function (h) { return txt(h) === 'Sendhur Crackers'; });
+    if (!h1) return;
+    var container = h1.parentElement;
+    var gradientLayer = container && container.parentElement;
+    if (!gradientLayer || gradientLayer.dataset.ceHeroPatched === '1') return;
+    gradientLayer.dataset.ceHeroPatched = '1';
+
+    Array.from(gradientLayer.children).forEach(function (child) {
+      if (child !== container) child.style.display = 'none';
+    });
+    gradientLayer.style.backgroundImage = 'url(/herobanner.png)';
+    gradientLayer.style.backgroundSize = 'contain';
+    gradientLayer.style.backgroundPosition = 'center';
+    gradientLayer.style.backgroundRepeat = 'no-repeat';
+    gradientLayer.style.backgroundColor = '#ffffff';
+
+    var h1InContainer = container.querySelector('h1');
+    var pInContainer = container.querySelector('p');
+    if (h1InContainer) h1InContainer.style.display = 'none';
+    if (pInContainer) pInContainer.style.display = 'none';
+    if (container.firstElementChild && container.firstElementChild !== h1InContainer) {
+      container.firstElementChild.style.display = 'none'; // the 🎆 emoji above the title
+    }
+
+    container.style.position = 'absolute';
+    container.style.left = '50%';
+    container.style.bottom = '0';
+    container.style.transform = 'translateX(-50%)';
+    container.style.margin = '0';
+  }
+
   function findPlaceEnquiryButton() {
     var allButtons = Array.from(document.querySelectorAll('button'));
     for (var i = 0; i < allButtons.length; i++) {
@@ -336,6 +371,7 @@
 
   function loop() {
     try {
+      patchHeroBanner();
       renderCouponBox();
       renderGstNote();
       hideDownloadInvoiceButton();

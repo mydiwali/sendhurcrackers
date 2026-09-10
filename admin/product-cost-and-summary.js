@@ -1,8 +1,7 @@
-// Patches the compiled admin bundle (no React source ships in this repo) to add:
-//  1) A "Purchased Price" (cost) field on the Add/Edit Product form — internal only,
-//     never returned by the customer-facing API and never shown on the storefront.
-//  2) A "Full Summary (PDF)" button on Order Detail that exports S.No, Product Name,
-//     Qty, Actual Price and Purchased Price for every line item.
+// Patches the compiled admin bundle (no React source ships in this repo) to add
+// a "Purchased Price" (cost) field on the Add/Edit Product form — internal only,
+// never returned by the customer-facing API and never shown on the storefront.
+// Also fixes the Order Detail "Sub Total"/"Discount" rows to show real values.
 (function () {
   'use strict';
 
@@ -55,10 +54,6 @@
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error((data && (data.error || data.message)) || 'Request failed');
     return data;
-  }
-
-  function currency(n) {
-    return 'Rs ' + Number(n || 0).toFixed(2);
   }
 
   function rupee(n) {
@@ -229,152 +224,6 @@
     return { key: orderNumber, by: 'orderNumber', value: orderNumber };
   }
 
-  let jsPdfLoadPromise = null;
-  function loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Failed to load ' + src));
-      document.head.appendChild(s);
-    });
-  }
-  function ensureJsPdfLoaded() {
-    if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve();
-    if (!jsPdfLoadPromise) {
-      jsPdfLoadPromise = loadScript('https://cdn.jsdelivr.net/npm/jspdf@2/dist/jspdf.umd.min.js')
-        .then(() => loadScript('https://cdn.jsdelivr.net/npm/jspdf-autotable@3/dist/jspdf.plugin.autotable.min.js'));
-    }
-    return jsPdfLoadPromise;
-  }
-
-  async function downloadOrderSummaryPdf(target, btn) {
-    const originalLabel = btn.textContent;
-    btn.disabled = true;
-    btn.textContent = 'Preparing...';
-    try {
-      await ensureJsPdfLoaded();
-      const orderPath = target.by === 'id'
-        ? '/admin/orders/' + target.value
-        : '/orders/' + encodeURIComponent(target.value);
-      const [orderRes, productsRes] = await Promise.all([
-        api(orderPath, { method: 'GET' }),
-        api('/admin/products', { method: 'GET' }),
-      ]);
-      const order = orderRes.data || {};
-      const items = Array.isArray(order.items) ? order.items : [];
-      const products = Array.isArray(productsRes.data) ? productsRes.data : [];
-      const costById = {};
-      products.forEach((p) => { costById[p.id] = p.purchasedPrice; });
-
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      doc.setFontSize(13);
-      doc.text('Order Summary' + (order.orderNumber ? ' - ' + order.orderNumber : ''), 14, 15);
-
-      let grandTotalPrice = 0;
-      let grandTotalPurchasedPrice = 0;
-      const rows = items.map((item, idx) => {
-        const cost = item.productId != null ? costById[item.productId] : null;
-        const qty = Number(item.quantity || 0);
-        const actualPrice = Number(item.price || 0);
-        const purchasedPrice = cost !== null && cost !== undefined ? Number(cost) : null;
-        const totalPrice = actualPrice * qty;
-        const totalPurchasedPrice = purchasedPrice !== null ? purchasedPrice * qty : null;
-
-        grandTotalPrice += totalPrice;
-        if (totalPurchasedPrice !== null) grandTotalPurchasedPrice += totalPurchasedPrice;
-
-        return [
-          String(idx + 1),
-          item.name || '-',
-          String(qty),
-          currency(actualPrice),
-          purchasedPrice !== null ? currency(purchasedPrice) : '-',
-          currency(totalPrice),
-          totalPurchasedPrice !== null ? currency(totalPurchasedPrice) : '-',
-        ];
-      });
-
-      doc.autoTable({
-        startY: 22,
-        head: [['S.No', 'Product Name', 'Qty', 'Actual Price', 'Purchased Price', 'Total Price', 'Total Purchased Price']],
-        body: rows,
-        foot: [[
-          '',
-          'Grand Total',
-          '',
-          '',
-          '',
-          currency(grandTotalPrice),
-          currency(grandTotalPurchasedPrice),
-        ]],
-        theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-        footStyles: { fillColor: [240, 240, 240], textColor: 20, fontStyle: 'bold' },
-        styles: { fontSize: 9 },
-      });
-
-      doc.save('order-summary-' + (order.orderNumber || target.key || 'order') + '.pdf');
-    } catch (err) {
-      alert(err.message || 'Failed to generate summary PDF');
-    } finally {
-      btn.disabled = false;
-      btn.textContent = originalLabel;
-    }
-  }
-
-  function findPrimaryOrderDownloadButton() {
-    const buttons = Array.from(document.querySelectorAll('button')).filter((b) => text(b) === 'Download PDF');
-    if (!buttons.length) return null;
-
-    // Prefer the order action-row button (the one next to "Preview Bill"),
-    // not the invoice modal button.
-    for (let i = 0; i < buttons.length; i += 1) {
-      const b = buttons[i];
-      const row = b.parentElement;
-      if (!row) continue;
-      const hasPreview = Array.from(row.querySelectorAll('button')).some((x) => text(x) === 'Preview Bill');
-      if (hasPreview) return b;
-    }
-    return buttons[0];
-  }
-
-  async function ensureOrderSummaryButton() {
-    const target = await resolveOrderTarget();
-
-    let wrap = document.getElementById('pp-summary-btn-wrap');
-    if (!target.key) {
-      if (wrap) wrap.remove();
-      return;
-    }
-    const downloadBtn = findPrimaryOrderDownloadButton();
-    if (!downloadBtn) {
-      if (wrap) wrap.remove();
-      return;
-    }
-
-    const parentRow = downloadBtn.parentElement;
-    if (!parentRow) return;
-
-    if (wrap && wrap.dataset.orderKey === target.key && document.body.contains(wrap) && wrap.parentElement === parentRow) return;
-    if (wrap) wrap.remove();
-
-    wrap = document.createElement('span');
-    wrap.id = 'pp-summary-btn-wrap';
-    wrap.dataset.orderKey = target.key;
-    wrap.style.display = 'inline-flex';
-
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.textContent = 'Order Full Summary PDF';
-    btn.className = downloadBtn.className || 'px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium';
-    btn.addEventListener('click', () => downloadOrderSummaryPdf(target, btn));
-
-    wrap.appendChild(btn);
-    downloadBtn.insertAdjacentElement('afterend', wrap);
-  }
-
   // The compiled bundle's order-detail "Item Details" tab and the invoice
   // preview modal both render a "Sub Total (X Items) / Discount / Total"
   // block, but "Sub Total" is wrongly computed from the already-discounted
@@ -478,7 +327,6 @@
     patchLoopBusy = true;
     try {
       await ensureProductFormPatch();
-      await ensureOrderSummaryButton();
       await ensureOrderDiscountPatch();
     } catch (err) {
       console.warn('Admin product-cost/order-summary patch error:', err.message || err);

@@ -1,15 +1,29 @@
 <?php
 // ── Database config — fill these with Hostinger MySQL values ─────────────────
-define('DB_HOST', getenv('DB_HOST') ?: 'localhost');
-define('DB_USER', getenv('DB_USER') ?: 'u944058827_sendhur');
-define('DB_PASS', getenv('DB_PASS') ?: 'Gpavi@936146');
-define('DB_NAME', getenv('DB_NAME') ?: 'u944058827_sendhur');
+// NOTE: use getenv(...) !== false (not ?:) so an intentionally empty env var
+// (e.g. DB_PASS= for local MySQL with no password) is respected instead of
+// silently falling back to the production value below.
+function envOr(string $name, string $default): string {
+    $v = getenv($name);
+    return $v !== false ? $v : $default;
+}
+define('DB_HOST', envOr('DB_HOST', 'localhost'));
+define('DB_USER', envOr('DB_USER', 'root'));
+define('DB_PASS', envOr('DB_PASS', ''));
+define('DB_NAME', envOr('DB_NAME', 'diwali_crackers'));
 
 // ── JWT Secret ───────────────────────────────────────────────────────────────
-define('JWT_SECRET', getenv('JWT_SECRET') ?: 'REPLACE_WITH_64_CHAR_SECRET');
+define('JWT_SECRET', envOr('JWT_SECRET', 'REPLACE_WITH_64_CHAR_SECRET'));
 
 // ── Backend public URL ───────────────────────────────────────────────────────
-define('BACKEND_URL', getenv('BACKEND_URL') ?: 'https://red-mantis-210719.hostingersite.com/');
+// Falls back to whatever domain actually served this request, so uploaded
+// file URLs always match the current site instead of a stale fixed domain.
+function detectBackendUrl(): string {
+    $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    return "$scheme://$host";
+}
+define('BACKEND_URL', getenv('BACKEND_URL') ?: detectBackendUrl());
 define('UPLOAD_DIR',  __DIR__ . '/uploads');
 
 // ── MySQL connection (singleton) ─────────────────────────────────────────────
