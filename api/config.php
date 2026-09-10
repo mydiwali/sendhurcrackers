@@ -8,9 +8,9 @@ function envOr(string $name, string $default): string {
     return $v !== false ? $v : $default;
 }
 define('DB_HOST', envOr('DB_HOST', 'localhost'));
-define('DB_USER', envOr('DB_USER', 'root'));
-define('DB_PASS', envOr('DB_PASS', ''));
-define('DB_NAME', envOr('DB_NAME', 'diwali_crackers'));
+define('DB_USER', envOr('DB_USER', 'u944058827_sendhur'));
+define('DB_PASS', envOr('DB_PASS', 'Gpavi@936146'));
+define('DB_NAME', envOr('DB_NAME', 'u944058827_sendhur'));
 
 // ── JWT Secret ───────────────────────────────────────────────────────────────
 define('JWT_SECRET', envOr('JWT_SECRET', 'REPLACE_WITH_64_CHAR_SECRET'));
