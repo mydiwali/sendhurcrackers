@@ -87,5 +87,25 @@ function routeUpload(string $method, string $r1, string $r2, string $r3): void {
         jsonOut(['data' => ['url' => $publicUrl]]);
     }
 
+    // POST /upload/branding  (store logo, favicon and other site branding images)
+    if ($method === 'POST' && $r1 === 'branding') {
+        if (empty($_FILES['file'])) jsonOut(['error' => 'No file uploaded'], 400);
+
+        $file = $_FILES['file'];
+        if ($file['size'] > 5 * 1024 * 1024) jsonOut(['error' => 'File exceeds 5MB limit'], 400);
+
+        $dir = "$uploadRoot/branding";
+        if (!is_dir($dir)) mkdir($dir, 0755, true);
+
+        $ext      = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION)) ?: 'png';
+        $filename = uuid() . '.' . $ext;
+        $dest     = "$dir/$filename";
+
+        if (!move_uploaded_file($file['tmp_name'], $dest)) jsonOut(['error' => 'Upload failed'], 500);
+
+        $publicUrl = "$backendUrl/api/uploads/branding/$filename";
+        jsonOut(['data' => ['url' => $publicUrl]]);
+    }
+
     jsonOut(['error' => 'Not found'], 404);
 }
