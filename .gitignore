@@ -1,0 +1,10 @@
+# User-uploaded content is created independently on each environment (local/live)
+# via the admin panel. Never commit it — otherwise every `git push`/deploy resets
+# the live server's uploads folder back to whatever was last committed, wiping out
+# images/PDFs that were uploaded directly on production.
+api/uploads/branding/*
+api/uploads/order-attachments/*
+api/uploads/product-images/*
+!api/uploads/**/.htaccess
+
+.DS_Store
