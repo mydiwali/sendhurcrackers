@@ -234,6 +234,16 @@
     if (el && el.style.display !== 'none') el.style.display = 'none';
   }
 
+  // ─────── Hide the "Fast delivery" badge on the product detail page ───────
+  // (exact lowercase-d text distinguishes it from the unrelated homepage
+  // "Fast Delivery" feature card, which is left untouched).
+  function hideFastDeliveryBadge() {
+    var span = Array.from(document.querySelectorAll('span')).find(function (s) { return s.textContent.trim() === 'Fast delivery'; });
+    if (!span) return;
+    var box = span.closest('div');
+    if (box && box.style.display !== 'none') box.style.display = 'none';
+  }
+
   // ─────── "Download Price List" icon next to the Home / All Products /
   // Categories / Contact nav links — only shown when enabled + a file is
   // configured in Settings > Social Media > Price List Download. ───────
@@ -573,6 +583,7 @@
     try {
       patchHeroBanner();
       hideShopNowButton();
+      hideFastDeliveryBadge();
       patchFooterContacts();
       patchFloatingButtons();
       patchFloatingSocialButtons();
