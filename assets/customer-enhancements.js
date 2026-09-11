@@ -161,6 +161,123 @@
     }
   }
 
+  // ─────── Site settings fetched from the API (social links + price list) ───────
+  // Reuses the existing admin-configurable instagramUrl/youtubeUrl store fields
+  // (Settings > Social Media) and the new priceList setting (Settings > Social
+  // Media > Price List Download). Refreshed periodically so admin changes show
+  // up without a hard reload.
+  var siteSettings = { instagramUrl: '', youtubeUrl: '', priceListEnabled: false, priceListUrl: '' };
+
+  function refreshSiteSettings() {
+    fetch('/api/settings/store').then(function (r) { return r.json(); }).then(function (json) {
+      var d = (json && json.data) || {};
+      siteSettings.instagramUrl = d.instagramUrl || '';
+      siteSettings.youtubeUrl = d.youtubeUrl || '';
+    }).catch(function () {});
+
+    fetch('/api/settings/price-list').then(function (r) { return r.json(); }).then(function (json) {
+      var d = (json && json.data) || {};
+      siteSettings.priceListEnabled = !!d.enabled;
+      siteSettings.priceListUrl = d.url || '';
+    }).catch(function () {});
+  }
+
+  // ─────── Floating Instagram / YouTube buttons — added into the same
+  // bottom-left corner stack as the existing WhatsApp/Call buttons. ───────
+  var SOCIAL_ICONS = {
+    instagram: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#fff"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"></line></svg>',
+    youtube: '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#fff"><path d="M2.5 17a24.12 24.12 0 0 1 0-10 2 2 0 0 1 1.4-1.4 49.56 49.56 0 0 1 16.2 0A2 2 0 0 1 21.5 7a24.12 24.12 0 0 1 0 10 2 2 0 0 1-1.4 1.4 49.55 49.55 0 0 1-16.2 0A2 2 0 0 1 2.5 17"></path><path d="m10 15 5-3-5-3z"></path></svg>',
+  };
+  var SOCIAL_STYLE = {
+    instagram: 'background:linear-gradient(135deg,#833ab4,#fd1d1d,#fcb045);box-shadow:0 20px 25px -5px rgba(225,48,108,0.35)',
+    youtube: 'background:linear-gradient(135deg,#ff4d4d,#cc0000);box-shadow:0 20px 25px -5px rgba(204,0,0,0.35)',
+  };
+
+  function findFloatingButtonsContainer() {
+    var waBtn = Array.from(document.querySelectorAll('a')).find(function (a) { return a.title === 'Chat on WhatsApp'; });
+    return waBtn ? waBtn.parentElement : null;
+  }
+
+  function ensureSocialButton(container, key, url) {
+    var id = 'ce-social-' + key;
+    var existing = document.getElementById(id);
+    if (!url) {
+      if (existing) existing.remove();
+      return;
+    }
+    if (existing) {
+      if (existing.getAttribute('href') !== url) existing.setAttribute('href', url);
+      return;
+    }
+    var a = document.createElement('a');
+    a.id = id;
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.title = key.charAt(0).toUpperCase() + key.slice(1);
+    a.className = 'w-12 h-12 md:w-14 md:h-14 rounded-full flex items-center justify-center hover:scale-110 transition-all';
+    a.style.cssText = SOCIAL_STYLE[key];
+    a.innerHTML = SOCIAL_ICONS[key];
+    container.appendChild(a);
+  }
+
+  function patchFloatingSocialButtons() {
+    var container = findFloatingButtonsContainer();
+    if (!container) return;
+    ensureSocialButton(container, 'instagram', siteSettings.instagramUrl);
+    ensureSocialButton(container, 'youtube', ''); // YouTube icon removed per request; keep hookup for future re-enable
+  }
+
+  // ─────── Hide the hero "Shop Now" button ───────
+  function hideShopNowButton() {
+    var el = Array.from(document.querySelectorAll('a, button')).find(function (n) { return txt(n).indexOf('Shop Now') !== -1; });
+    if (el && el.style.display !== 'none') el.style.display = 'none';
+  }
+
+  // ─────── "Download Price List" icon next to the Home / All Products /
+  // Categories / Contact nav links — only shown when enabled + a file is
+  // configured in Settings > Social Media > Price List Download. ───────
+  var DOWNLOAD_ICON = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>';
+  var PRICE_LIST_LINK_ID = 'ce-price-list-link';
+
+  function findNavContactLinks() {
+    return Array.from(document.querySelectorAll('a[href="/contact"]')).filter(function (a) {
+      var p = a.parentElement;
+      return p && /(^|\s)items-center gap-1(\s|$)|(^|\s)space-y-1(\s|$)/.test(p.className || '');
+    });
+  }
+
+  function patchPriceListLinks() {
+    var enabled = siteSettings.priceListEnabled && siteSettings.priceListUrl;
+    var links = findNavContactLinks();
+    links.forEach(function (link) {
+      var existing = link.nextElementSibling && link.nextElementSibling.id === PRICE_LIST_LINK_ID ? link.nextElementSibling : null;
+      if (!enabled) {
+        if (existing) existing.remove();
+        return;
+      }
+      if (existing) {
+        if (existing.getAttribute('href') !== siteSettings.priceListUrl) existing.setAttribute('href', siteSettings.priceListUrl);
+        return;
+      }
+      var isMobile = /(^|\s)block(\s|$)/.test(link.className || '');
+      var a = document.createElement('a');
+      a.id = PRICE_LIST_LINK_ID;
+      a.href = siteSettings.priceListUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.title = 'Download Price List';
+      if (isMobile) {
+        a.className = link.className;
+        a.innerHTML = '<span style="display:inline-flex;align-items:center;gap:8px;">' + DOWNLOAD_ICON + '<span>Download Price List</span></span>';
+      } else {
+        a.className = 'px-3 py-2 text-sm font-medium text-surface-600 rounded-lg hover:text-primary-600 hover:bg-primary-50 transition-all inline-flex items-center';
+        a.innerHTML = DOWNLOAD_ICON;
+      }
+      link.insertAdjacentElement('afterend', a);
+    });
+  }
+
   // Contact page — replace the single Phone/WhatsApp cards with one card per contact.
   function patchContactPage() {
     var h1 = Array.from(document.querySelectorAll('h1')).find(function (h) { return txt(h) === 'Contact Us'; });
@@ -455,8 +572,11 @@
   function loop() {
     try {
       patchHeroBanner();
+      hideShopNowButton();
       patchFooterContacts();
       patchFloatingButtons();
+      patchFloatingSocialButtons();
+      patchPriceListLinks();
       patchContactPage();
       renderCouponBox();
       renderGstNote();
@@ -561,6 +681,8 @@
   }, 1000);
 
   setTimeout(loop, 300);
+  refreshSiteSettings();
+  setInterval(refreshSiteSettings, 20000);
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', loop);

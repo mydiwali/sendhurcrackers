@@ -628,6 +628,17 @@ function routeAdmin(string $method, string $r1, string $r2, string $r3, string $
                 adminUpsertSetting('pageConfig',$cfg); jsonOut(['data'=>$cfg]);
             }
         }
+        // Stored under its own key (not merged into 'store') so the Organization
+        // tab's own Save button can never overwrite/clear this independently-saved value.
+        if ($r2 === 'price-list') {
+            if ($method === 'GET')  jsonOut(['data' => adminGetSetting('priceList') ?? ['enabled'=>false,'url'=>'']]);
+            if ($method === 'PUT') {
+                $b = jsonBody();
+                $value = ['enabled' => (bool)($b['enabled'] ?? false), 'url' => trim((string)($b['url'] ?? ''))];
+                adminUpsertSetting('priceList', $value);
+                jsonOut(['data' => $value]);
+            }
+        }
     }
 
     // ══ COUPONS ════════════════════════════════════════════════════════════════

@@ -34,5 +34,11 @@ function routeSettings(string $method, string $seg1, string $seg2): void {
         jsonOut(['data' => $banners]);
     }
 
+    // GET /settings/price-list — public read used by the storefront nav icon
+    if ($method === 'GET' && $seg1 === 'price-list') {
+        $value = getSetting('priceList');
+        jsonOut(['data' => ['enabled' => (bool)($value['enabled'] ?? false), 'url' => $value['url'] ?? '']]);
+    }
+
     jsonOut(['error' => 'Not found'], 404);
 }
