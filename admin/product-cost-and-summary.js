@@ -60,6 +60,26 @@
     return '\u20B9' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  // The bundle's own Save handler only shows a generic "Save failed" toast
+  // with no detail (bare `catch{}`, no access to the response body), and
+  // until now a duplicate Product Number was silently accepted as "success"
+  // by the backend. We surface the real backend error message ourselves so
+  // the admin knows exactly what went wrong (e.g. which number is taken).
+  function showAdminErrorToast(message) {
+    const id = 'pp-error-toast';
+    const existing = document.getElementById(id);
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.id = id;
+    el.style.cssText = 'position:fixed;top:20px;right:20px;z-index:99999;max-width:360px;' +
+      'background:#fef2f2;border:1px solid #fecaca;color:#991b1b;padding:14px 16px;' +
+      'border-radius:10px;box-shadow:0 10px 25px -5px rgba(0,0,0,0.25);font-size:14px;' +
+      'line-height:1.4;font-family:inherit;';
+    el.textContent = message;
+    document.body.appendChild(el);
+    setTimeout(() => { if (el.parentElement) el.remove(); }, 7000);
+  }
+
   // ── 1) Purchased Price field on Add/Edit Product form ──────────────────────
 
   function extractProductId() {
@@ -156,6 +176,15 @@
           parsed.purchasedPrice = input.value === '' ? null : Number(input.value);
           body = JSON.stringify(parsed);
         }
+        this.addEventListener('load', function () {
+          if (this.status < 400) return;
+          let msg = 'Failed to save product (HTTP ' + this.status + ').';
+          try {
+            const res = JSON.parse(this.responseText);
+            if (res && res.error) msg = res.error;
+          } catch (_) { /* non-JSON error body, keep generic message */ }
+          showAdminErrorToast(msg);
+        });
       }
     } catch (_) { /* if anything goes wrong, send the original body untouched */ }
     return OrigSend.call(this, body);

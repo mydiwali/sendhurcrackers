@@ -25,7 +25,7 @@ function routeProducts(string $method, string $seg1, string $seg2): void {
     // GET /products  (list)
     if ($method === 'GET' && !$seg1) {
         $page     = max(0, (int)($_GET['page'] ?? 0));
-        $size     = max(1, min(100, (int)($_GET['size'] ?? 12)));
+        $size     = max(1, min(300, (int)($_GET['size'] ?? 12)));
         $catId    = $_GET['categoryId'] ?? '';
         $search   = $_GET['search'] ?? '';
         $sort     = $_GET['sort'] ?? '';
@@ -47,12 +47,13 @@ function routeProducts(string $method, string $seg1, string $seg2): void {
         $whereSQL = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
         $orderBy = match($sort) {
-            'price_asc'  => 'p.price ASC',
-            'price_desc' => 'p.price DESC',
-            'name_asc'   => 'p.name ASC',
-            'featured'   => 'p.is_featured DESC, p.avg_rating DESC, p.created_at DESC',
-            'latest'     => 'p.created_at DESC',
-            default      => 'ISNULL(p.product_number), p.product_number ASC, p.created_at DESC',
+            'price_asc'      => 'p.price ASC',
+            'price_desc'     => 'p.price DESC',
+            'name_asc'       => 'p.name ASC',
+            'featured'       => 'p.is_featured DESC, p.avg_rating DESC, p.created_at DESC',
+            'latest'         => 'p.created_at DESC',
+            'product_number' => 'ISNULL(p.product_number), p.product_number ASC, p.created_at DESC',
+            default          => 'ISNULL(p.product_number), p.product_number ASC, p.created_at DESC',
         };
 
         $countRow = queryOne("SELECT COUNT(*) as total FROM products p $whereSQL", $types, $params);

@@ -31,11 +31,43 @@
     apiCache.set(key, { value: data, at: Date.now() });
   }
 
+  // ─────── Homepage "Our Products" row — show the FULL catalog, sorted by
+  // product number, instead of just 20 "featured" items — while leaving the
+  // native component's own rendering (and visual style) completely untouched.
+  // We only rewrite the query string of its one specific request; React still
+  // renders every row itself, so styling/interactivity (qty +/- buttons, etc.)
+  // stay exactly as before. Per-category "Shop by Category" requests (which
+  // always carry a categoryId) are left alone. ───────
+  var HOMEPAGE_ROW_SIZE = 300;
+
+  function rewriteHomepageProductsUrl(url) {
+    try {
+      var u = new URL(String(url || ''), window.location.origin);
+      if (!/\/api\/products\/?$/.test(u.pathname)) return url;
+      if (u.searchParams.get('categoryId')) return url;
+      if (u.searchParams.get('sort') !== 'featured') return url;
+      if (u.searchParams.get('size') !== '20') return url;
+      u.searchParams.set('sort', 'product_number');
+      u.searchParams.set('size', String(HOMEPAGE_ROW_SIZE));
+      return u.pathname + '?' + u.searchParams.toString();
+    } catch (e) {
+      return url;
+    }
+  }
+
   if (typeof window.fetch === 'function') {
     var origFetch = window.fetch;
     window.fetch = function (input, init) {
       var method = ((init && init.method) || 'GET').toUpperCase();
       var url = typeof input === 'string' ? input : (input && input.url) || '';
+
+      if (method === 'GET') {
+        var rewritten = rewriteHomepageProductsUrl(url);
+        if (rewritten !== url) {
+          url = rewritten;
+          input = url;
+        }
+      }
 
       if (shouldCache(url, method)) {
         var cached = getCachedResponse(url, method);
@@ -48,7 +80,7 @@
           return pendingRequests.get(key);
         }
 
-        var promise = origFetch.apply(this, arguments).then(function (res) {
+        var promise = origFetch.call(this, input, init).then(function (res) {
           if (res.ok) {
             var cloned = res.clone();
             setCachedResponse(url, method, cloned);
@@ -64,7 +96,7 @@
         return promise;
       }
 
-      return origFetch.apply(this, arguments);
+      return origFetch.call(this, input, init);
     };
   }
 
@@ -232,6 +264,14 @@
   function hideShopNowButton() {
     var el = Array.from(document.querySelectorAll('a, button')).find(function (n) { return txt(n).indexOf('Shop Now') !== -1; });
     if (el && el.style.display !== 'none') el.style.display = 'none';
+  }
+
+  // ─────── Remove the "Shop by Category" section from the homepage ───────
+  function hideShopByCategorySection() {
+    var h2 = Array.from(document.querySelectorAll('h2')).find(function (h) { return txt(h) === 'Shop by Category'; });
+    if (!h2) return;
+    var section = h2.closest('section');
+    if (section && section.style.display !== 'none') section.style.display = 'none';
   }
 
   // ─────── Hide the "Fast delivery" badge on the product detail page ───────
@@ -583,6 +623,7 @@
     try {
       patchHeroBanner();
       hideShopNowButton();
+      hideShopByCategorySection();
       hideFastDeliveryBadge();
       patchFooterContacts();
       patchFloatingButtons();
@@ -641,8 +682,14 @@
   var OrigXhrSend = XMLHttpRequest.prototype.send;
   XMLHttpRequest.prototype.open = function (method, url) {
     this._ceMethod = (method || '').toUpperCase();
-    this._ceUrl = url || '';
-    return OrigXhrOpen.apply(this, arguments);
+    var finalUrl = url || '';
+    if (this._ceMethod === 'GET') {
+      finalUrl = rewriteHomepageProductsUrl(finalUrl);
+    }
+    this._ceUrl = finalUrl;
+    var args = Array.prototype.slice.call(arguments);
+    args[1] = finalUrl;
+    return OrigXhrOpen.apply(this, args);
   };
   XMLHttpRequest.prototype.send = function (body) {
     try {
