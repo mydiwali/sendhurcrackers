@@ -257,7 +257,28 @@
     var container = findFloatingButtonsContainer();
     if (!container) return;
     ensureSocialButton(container, 'instagram', siteSettings.instagramUrl);
-    ensureSocialButton(container, 'youtube', ''); // YouTube icon removed per request; keep hookup for future re-enable
+    ensureSocialButton(container, 'youtube', siteSettings.youtubeUrl);
+  }
+
+  // Hide Instagram/YouTube inside the app's own right-edge floating social bar —
+  // those two should only appear once, in our bottom-left corner stack.
+  function findNativeSocialSidebar() {
+    return Array.from(document.querySelectorAll('div')).find(function (d) {
+      var cn = d.className;
+      return typeof cn === 'string' && cn.indexOf('fixed') !== -1 && cn.indexOf('right-0') !== -1 &&
+        cn.indexOf('top-1/2') !== -1 && cn.indexOf('flex-col') !== -1;
+    });
+  }
+
+  function hideNativeSocialSidebarDuplicates() {
+    var bar = findNativeSocialSidebar();
+    if (!bar) return;
+    Array.from(bar.querySelectorAll('a[href]')).forEach(function (a) {
+      var href = a.getAttribute('href') || '';
+      if (/instagram\.com/i.test(href) || /youtube\.com|youtu\.be/i.test(href)) {
+        if (a.style.display !== 'none') a.style.display = 'none';
+      }
+    });
   }
 
   // ─────── Hide the hero "Shop Now" button ───────
@@ -628,6 +649,7 @@
       patchFooterContacts();
       patchFloatingButtons();
       patchFloatingSocialButtons();
+      hideNativeSocialSidebarDuplicates();
       patchPriceListLinks();
       patchContactPage();
       renderCouponBox();
